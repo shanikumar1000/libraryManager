@@ -5,10 +5,10 @@ import {
 } from 'lucide-react';
 import { mockReservations, mockBooks } from '@/data/mockData';
 import PageHeader from '@/components/PageHeader';
-import { useDemoAuth } from '@/context/DemoAuthContext';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Dashboard() {
-  const { user } = useDemoAuth();
+  const { user } = useAuth();
   const activeReservations = mockReservations.filter((r) => r.status === 'issued' || r.status === 'approved');
   const pendingReservations = mockReservations.filter((r) => r.status === 'pending');
   const returnedReservations = mockReservations.filter((r) => r.status === 'returned');

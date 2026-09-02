@@ -10,7 +10,7 @@ import {
 import { mockBooks, mockReservations } from '@/data/mockData';
 import type { ReservationStatus } from '@/types';
 import PageHeader from '@/components/PageHeader';
-import { useDemoAuth } from '@/context/DemoAuthContext';
+import { useAuth } from '@/context/AuthContext';
 
 const statusConfig: Record<ReservationStatus, { label: string; badge: string }> = {
   pending:   { label: 'Pending',   badge: 'bg-warning-100 text-warning-700' },
@@ -24,7 +24,7 @@ const statusConfig: Record<ReservationStatus, { label: string; badge: string }> 
 const allStatuses: ReservationStatus[] = ['pending', 'approved', 'issued', 'returned', 'rejected', 'cancelled'];
 
 export default function AdminDashboard() {
-  const { user } = useDemoAuth();
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [selectedStatuses, setSelectedStatuses] = useState<ReservationStatus[]>([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -83,13 +83,7 @@ export default function AdminDashboard() {
         </button>
       </PageHeader>
 
-      {/* TEMPORARY: Demo admin view — replace with real role-based content when Supabase auth is implemented */}
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center gap-2 rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-800">
-          <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          <span>Demo mode: This admin dashboard is for testing purposes only and will be replaced with real role-based access control.</span>
-        </div>
-
         {/* Stats */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {stats.map((stat, i) => {

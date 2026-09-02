@@ -1,5 +1,5 @@
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
-import { DemoAuthProvider } from '@/context/DemoAuthContext';
+import { AuthProvider } from '@/context/AuthContext';
 import Layout from '@/components/Layout';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Home from '@/pages/Home';
@@ -12,16 +12,13 @@ import SignIn from '@/pages/SignIn';
 import SignUp from '@/pages/SignUp';
 import NotFound from '@/pages/NotFound';
 
-// TEMPORARY: DemoAuthProvider wraps the app for frontend role testing.
-// Replace with real Supabase auth provider when authentication is implemented.
-
 const router = createBrowserRouter([
   {
     path: '/',
     element: (
-      <DemoAuthProvider>
+      <AuthProvider>
         <Layout />
-      </DemoAuthProvider>
+      </AuthProvider>
     ),
     children: [
       { index: true, element: <Home /> },

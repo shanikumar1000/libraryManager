@@ -1,21 +1,37 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, Eye, EyeOff, BookMarked, Library, ArrowRight, Check } from 'lucide-react';
-import { useDemoAuth } from '@/context/DemoAuthContext';
+import { Mail, Lock, User, Eye, EyeOff, BookMarked, Library, ArrowRight, Check, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function SignUp() {
   const navigate = useNavigate();
-  const { signIn } = useDemoAuth();
+  const { signUp } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    signIn('student');
-    navigate('/student/dashboard');
+    setError(null);
+    setLoading(true);
+    const { error: signUpError } = await signUp(email, password, name);
+    if (signUpError) {
+      setError(signUpError);
+      setLoading(false);
+      return;
+    }
+    setSuccess(true);
+    setLoading(false);
+    // After signup, Supabase auto-signs-in the user (email confirmation is off).
+    // Navigate to the student dashboard after a brief delay for the auth state to settle.
+    setTimeout(() => {
+      navigate('/student/dashboard', { replace: true });
+    }, 1500);
   };
 
   const benefits = [
@@ -41,6 +57,20 @@ export default function SignUp() {
 
           <h1 className="mt-8 font-serif text-3xl text-neutral-900 lg:mt-0">Create Account</h1>
           <p className="mt-2 text-sm text-neutral-500">Join thousands of readers today — it's free</p>
+
+          {error && (
+            <div className="mt-4 flex items-center gap-2 rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {success && (
+            <div className="mt-4 flex items-center gap-2 rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700">
+              <Check className="h-4 w-4 flex-shrink-0" />
+              <span>Account created! Redirecting to your dashboard...</span>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
             <div>
@@ -112,9 +142,9 @@ export default function SignUp() {
               </span>
             </label>
 
-            <button type="submit" className="btn-primary w-full py-3">
+            <button type="submit" disabled={loading} className="btn-primary w-full py-3 disabled:opacity-60">
               <BookMarked className="h-4 w-4" />
-              Create Account
+              {loading ? 'Creating account...' : 'Create Account'}
               <ArrowRight className="h-4 w-4" />
             </button>
           </form>

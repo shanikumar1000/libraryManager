@@ -1,15 +1,15 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { Library, Search, Menu, X, BookMarked, Info, LogIn, LogOut, GraduationCap, Shield } from 'lucide-react';
 import { useState } from 'react';
-import { useDemoAuth } from '@/context/DemoAuthContext';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, role, isAuthenticated, signOut } = useDemoAuth();
+  const { user, role, isAuthenticated, signOut } = useAuth();
   const navigate = useNavigate();
 
-  const handleSignOut = () => {
-    signOut();
+  const handleSignOut = async () => {
+    await signOut();
     setMobileOpen(false);
     navigate('/');
   };

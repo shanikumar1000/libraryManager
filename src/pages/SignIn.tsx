@@ -1,24 +1,36 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, LogIn, Library, ArrowRight, GraduationCap, Shield, FlaskConical } from 'lucide-react';
-import { useDemoAuth, type DemoRole } from '@/context/DemoAuthContext';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Mail, Lock, Eye, EyeOff, LogIn, Library, ArrowRight, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function SignIn() {
   const navigate = useNavigate();
-  const { signIn } = useDemoAuth();
+  const location = useLocation();
+  const { signIn } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const from = (location.state as { from?: string } | null)?.from;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    signIn('student');
-    navigate('/student/dashboard');
-  };
-
-  const handleDemoAccess = (role: DemoRole) => {
-    signIn(role);
-    navigate(role === 'admin' ? '/admin/dashboard' : '/student/dashboard');
+    setError(null);
+    setLoading(true);
+    const { error: signInError } = await signIn(email, password);
+    if (signInError) {
+      setError(signInError);
+      setLoading(false);
+      return;
+    }
+    // The onAuthStateChange listener will load the profile and set the user.
+    // Navigate to the appropriate dashboard based on role once it's available.
+    // We use a small timeout to let the auth state propagate.
+    setTimeout(() => {
+      navigate(from ?? '/student/dashboard', { replace: true });
+    }, 100);
   };
 
   return (
@@ -81,6 +93,13 @@ export default function SignIn() {
           <h1 className="mt-8 font-serif text-3xl text-neutral-900 lg:mt-0">Sign In</h1>
           <p className="mt-2 text-sm text-neutral-500">Enter your credentials to access your account</p>
 
+          {error && (
+            <div className="mt-4 flex items-center gap-2 rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
             <div>
               <label className="text-sm font-medium text-neutral-700">Email Address</label>
@@ -129,9 +148,9 @@ export default function SignIn() {
               Remember me for 30 days
             </label>
 
-            <button type="submit" className="btn-primary w-full py-3">
+            <button type="submit" disabled={loading} className="btn-primary w-full py-3 disabled:opacity-60">
               <LogIn className="h-4 w-4" />
-              Sign In
+              {loading ? 'Signing in...' : 'Sign In'}
               <ArrowRight className="h-4 w-4" />
             </button>
           </form>
@@ -142,40 +161,6 @@ export default function SignIn() {
               Sign up for free
             </Link>
           </p>
-
-          {/* TEMPORARY: Demo role selection for frontend testing only.
-              Remove this entire section when real Supabase auth is implemented. */}
-          <div className="mt-8 border-t border-dashed border-neutral-200 pt-6">
-            <div className="flex items-center justify-center gap-2 text-xs font-medium uppercase tracking-wider text-neutral-400">
-              <FlaskConical className="h-4 w-4" />
-              Demo Access (For Testing)
-            </div>
-            <p className="mt-2 text-center text-xs text-neutral-400">
-              Skip the form and pick a role to explore the app instantly.
-            </p>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <button
-                onClick={() => handleDemoAccess('student')}
-                className="group flex flex-col items-center gap-2 rounded-xl border border-neutral-200 bg-white p-4 transition-all hover:border-primary-300 hover:bg-primary-50 hover:shadow-md"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-100 text-primary-600 transition-colors group-hover:bg-primary-600 group-hover:text-white">
-                  <GraduationCap className="h-5 w-5" />
-                </div>
-                <span className="text-sm font-medium text-neutral-700 group-hover:text-primary-700">Student</span>
-                <span className="text-[11px] text-neutral-400">Browse & reserve</span>
-              </button>
-              <button
-                onClick={() => handleDemoAccess('admin')}
-                className="group flex flex-col items-center gap-2 rounded-xl border border-neutral-200 bg-white p-4 transition-all hover:border-accent-300 hover:bg-accent-50 hover:shadow-md"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-100 text-accent-600 transition-colors group-hover:bg-accent-600 group-hover:text-white">
-                  <Shield className="h-5 w-5" />
-                </div>
-                <span className="text-sm font-medium text-neutral-700 group-hover:text-accent-700">Librarian/Admin</span>
-                <span className="text-[11px] text-neutral-400">Manage library</span>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
