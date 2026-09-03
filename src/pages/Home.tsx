@@ -1,9 +1,12 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Search, BookOpen, Users, TrendingUp, ArrowRight,
   Sparkles, Library, Clock, Shield, Star,
 } from 'lucide-react';
-import { getFeaturedBooks, getNewArrivals, categories } from '@/data/mockData';
+import { categories } from '@/data/mockData';
+import { fetchFeaturedBooks, fetchNewArrivals } from '@/lib/booksService';
+import type { Book } from '@/types';
 import BookCard from '@/components/BookCard';
 
 const categoryIcons: Record<string, typeof Search> = {
@@ -12,8 +15,19 @@ const categoryIcons: Record<string, typeof Search> = {
 };
 
 export default function Home() {
-  const featured = getFeaturedBooks();
-  const newArrivals = getNewArrivals();
+  const [featured, setFeatured] = useState<Book[]>([]);
+  const [newArrivals, setNewArrivals] = useState<Book[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    fetchFeaturedBooks()
+      .then((data) => { if (active) setFeatured(data); })
+      .catch(() => {});
+    fetchNewArrivals()
+      .then((data) => { if (active) setNewArrivals(data); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   return (
     <div>

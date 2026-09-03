@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, SlidersHorizontal, Grid3x3, List as ListIcon, X } from 'lucide-react';
-import { mockBooks } from '@/data/mockData';
+import { Search, SlidersHorizontal, Grid3x3, List as ListIcon, X, CircleAlert as AlertCircle } from 'lucide-react';
+import { fetchAllBooks } from '@/lib/booksService';
 import type { Book, BookCategory, BookStatus } from '@/types';
 import BookCard from '@/components/BookCard';
 import PageHeader from '@/components/PageHeader';
@@ -16,12 +16,25 @@ const allStatuses: BookStatus[] = ['available', 'reserved', 'checked-out', 'main
 type SortOption = 'relevance' | 'title' | 'author' | 'rating' | 'newest';
 
 export default function Catalog() {
+  const [books, setBooks] = useState<Book[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<BookCategory[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<BookStatus[]>([]);
   const [sortBy, setSortBy] = useState<SortOption>('relevance');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showFilters, setShowFilters] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    fetchAllBooks()
+      .then((data) => { if (active) { setBooks(data); setError(null); } })
+      .catch((err) => { if (active) setError(err.message ?? 'Failed to load books.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const toggleCategory = (cat: BookCategory) => {
     setSelectedCategories((prev) =>
@@ -43,7 +56,7 @@ export default function Catalog() {
   };
 
   const filteredBooks = useMemo(() => {
-    let result: Book[] = mockBooks.filter((book) => {
+    let result: Book[] = books.filter((book) => {
       const matchesSearch =
         !search ||
         book.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -77,7 +90,7 @@ export default function Catalog() {
     }
 
     return result;
-  }, [search, selectedCategories, selectedStatuses, sortBy]);
+  }, [books, search, selectedCategories, selectedStatuses, sortBy]);
 
   const activeFilterCount = selectedCategories.length + selectedStatuses.length;
 
@@ -211,7 +224,18 @@ export default function Catalog() {
 
           {/* Main content */}
           <div className="flex-1">
-            {filteredBooks.length === 0 ? (
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-20">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-300 border-t-primary-600" />
+                <p className="mt-3 text-sm text-neutral-500">Loading catalog...</p>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-error-200 bg-error-50 py-20 text-center">
+                <AlertCircle className="h-12 w-12 text-error-300" />
+                <p className="mt-4 text-lg font-medium text-error-700">Failed to load books</p>
+                <p className="mt-1 text-sm text-error-600">{error}</p>
+              </div>
+            ) : filteredBooks.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-neutral-300 py-20 text-center">
                 <Search className="h-12 w-12 text-neutral-300" />
                 <p className="mt-4 text-lg font-medium text-neutral-700">No books found</p>

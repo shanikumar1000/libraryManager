@@ -1,16 +1,80 @@
+import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Star, BookOpen, Calendar, Building2, Globe,
   MapPin, Tag, Bookmark, Share2, ChevronRight,
 } from 'lucide-react';
-import { getBookById, getRelatedBooks } from '@/data/mockData';
+import type { Book } from '@/types';
+import { fetchBookById, fetchRelatedBooks } from '@/lib/booksService';
 import BookCard from '@/components/BookCard';
+
+const statusConfig = {
+  available: { label: 'Available', class: 'bg-success-100 text-success-700' },
+  reserved: { label: 'Reserved', class: 'bg-warning-100 text-warning-700' },
+  'checked-out': { label: 'Checked Out', class: 'bg-neutral-200 text-neutral-600' },
+  maintenance: { label: 'Maintenance', class: 'bg-error-100 text-error-700' },
+} as const;
 
 export default function BookDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const book = id ? getBookById(id) : undefined;
+  const [book, setBook] = useState<Book | null>(null);
+  const [related, setRelated] = useState<Book[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    setError(null);
+    setBook(null);
+    setRelated([]);
+
+    fetchBookById(id)
+      .then(async (fetchedBook) => {
+        if (!active) return;
+        if (!fetchedBook) return;
+        setBook(fetchedBook);
+        try {
+          const relatedBooks = await fetchRelatedBooks(fetchedBook);
+          if (active) setRelated(relatedBooks);
+        } catch {
+          // Related books failure is non-critical — leave empty
+        }
+      })
+      .catch((err) => { if (active) setError(err.message ?? 'Failed to load book.'); })
+      .finally(() => { if (active) setLoading(false); });
+
+    return () => { active = false; };
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-300 border-t-primary-600" />
+        <p className="mt-3 text-sm text-neutral-500">Loading book...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-20 text-center sm:px-6 lg:px-8">
+        <BookOpen className="mx-auto h-12 w-12 text-error-300" />
+        <h1 className="mt-4 font-serif text-2xl text-neutral-900">Something went wrong</h1>
+        <p className="mt-2 text-neutral-500">{error}</p>
+        <Link to="/catalog" className="btn-primary mt-6">
+          <ArrowLeft className="h-4 w-4" />
+          Back to Catalog
+        </Link>
+      </div>
+    );
+  }
 
   if (!book) {
     return (
@@ -26,13 +90,6 @@ export default function BookDetail() {
     );
   }
 
-  const related = getRelatedBooks(book);
-  const statusConfig = {
-    available: { label: 'Available', class: 'bg-success-100 text-success-700' },
-    reserved: { label: 'Reserved', class: 'bg-warning-100 text-warning-700' },
-    'checked-out': { label: 'Checked Out', class: 'bg-neutral-200 text-neutral-600' },
-    maintenance: { label: 'Maintenance', class: 'bg-error-100 text-error-700' },
-  };
   const status = statusConfig[book.status];
 
   return (
