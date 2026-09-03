@@ -19,18 +19,19 @@ export default function SignIn() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const { error: signInError } = await signIn(email, password);
+    const { error: signInError, role } = await signIn(email, password);
     if (signInError) {
       setError(signInError);
       setLoading(false);
       return;
     }
-    // The onAuthStateChange listener will load the profile and set the user.
-    // Navigate to the appropriate dashboard based on role once it's available.
-    // We use a small timeout to let the auth state propagate.
-    setTimeout(() => {
-      navigate(from ?? '/student/dashboard', { replace: true });
-    }, 100);
+    if (from) {
+      navigate(from, { replace: true });
+    } else if (role === 'admin') {
+      navigate('/admin/dashboard', { replace: true });
+    } else {
+      navigate('/student/dashboard', { replace: true });
+    }
   };
 
   return (

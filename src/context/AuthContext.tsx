@@ -17,7 +17,7 @@ interface AuthContextValue {
   session: Session | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: string | null; role: UserRole | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -89,8 +89,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadUser]);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { error: error.message, role: null };
+
+    try {
+      const profile = await fetchProfile(data.user);
+      setUser(profile);
+      setSession(data.session);
+      return { error: null, role: profile.role };
+    } catch {
+      return { error: null, role: null };
+    }
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
