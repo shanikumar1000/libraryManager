@@ -27,10 +27,15 @@ export default function SignIn() {
     }
     if (from) {
       navigate(from, { replace: true });
-    } else if (role === 'admin') {
+      return;
+    }
+    if (role === 'admin') {
       navigate('/admin/dashboard', { replace: true });
-    } else {
+    } else if (role === 'student') {
       navigate('/student/dashboard', { replace: true });
+    } else {
+      setError('Unable to determine your account role. Please contact an administrator.');
+      setLoading(false);
     }
   };
 
