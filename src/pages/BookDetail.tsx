@@ -3,9 +3,12 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Star, BookOpen, Calendar, Building2, Globe,
   MapPin, Tag, Bookmark, Share2, ChevronRight,
+  CheckCircle2, AlertCircle, Loader2, LogIn,
 } from 'lucide-react';
 import type { Book } from '@/types';
 import { fetchBookById, fetchRelatedBooks } from '@/lib/booksService';
+import { createReservation, hasActiveReservation } from '@/lib/reservationsService';
+import { useAuth } from '@/context/AuthContext';
 import BookCard from '@/components/BookCard';
 
 const statusConfig = {
@@ -18,11 +21,18 @@ const statusConfig = {
 export default function BookDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
 
   const [book, setBook] = useState<Book | null>(null);
   const [related, setRelated] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [reservationLoading, setReservationLoading] = useState(false);
+  const [reservationSuccess, setReservationSuccess] = useState(false);
+  const [reservationError, setReservationError] = useState<string | null>(null);
+  const [existingReservation, setExistingReservation] = useState(false);
+  const [checkedExisting, setCheckedExisting] = useState(false);
 
   useEffect(() => {
     if (!id) {
@@ -52,6 +62,48 @@ export default function BookDetail() {
 
     return () => { active = false; };
   }, [id]);
+
+  // Check if the current user already has an active reservation for this book
+  useEffect(() => {
+    if (!isAuthenticated || !user || !id || !book) {
+      setExistingReservation(false);
+      setCheckedExisting(false);
+      return;
+    }
+    let active = true;
+    setCheckedExisting(false);
+    hasActiveReservation(id, user.id)
+      .then((has) => { if (active) setExistingReservation(has); })
+      .catch(() => { if (active) setExistingReservation(false); })
+      .finally(() => { if (active) setCheckedExisting(true); });
+    return () => { active = false; };
+  }, [isAuthenticated, user, id, book]);
+
+  const handleReserve = async () => {
+    if (!user || !book) return;
+    setReservationLoading(true);
+    setReservationError(null);
+    setReservationSuccess(false);
+
+    try {
+      const alreadyReserved = await hasActiveReservation(book.id, user.id);
+      if (alreadyReserved) {
+        setExistingReservation(true);
+        setReservationError('You already have an active reservation for this book.');
+        return;
+      }
+
+      await createReservation(book.id, user.id);
+      setReservationSuccess(true);
+      setExistingReservation(true);
+    } catch (err) {
+      setReservationError(
+        err instanceof Error ? err.message : 'Failed to create reservation. Please try again.',
+      );
+    } finally {
+      setReservationLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -131,17 +183,75 @@ export default function BookDetail() {
               </div>
 
               <div className="mt-4 flex gap-2">
-                <button
-                  disabled={book.status !== 'available'}
-                  className="btn-primary flex-1 disabled:opacity-50"
-                >
-                  <Bookmark className="h-4 w-4" />
-                  {book.status === 'available' ? 'Reserve Book' : 'Unavailable'}
-                </button>
+                {isAuthenticated ? (
+                  <button
+                    onClick={handleReserve}
+                    disabled={
+                      book.status !== 'available' ||
+                      book.copiesAvailable === 0 ||
+                      reservationLoading ||
+                      reservationSuccess ||
+                      existingReservation
+                    }
+                    className="btn-primary flex-1 disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    {reservationLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Reserving...
+                      </>
+                    ) : reservationSuccess ? (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" />
+                        Reserved!
+                      </>
+                    ) : existingReservation ? (
+                      <>
+                        <Bookmark className="h-4 w-4" />
+                        Already Reserved
+                      </>
+                    ) : book.status !== 'available' || book.copiesAvailable === 0 ? (
+                      <>
+                        <Bookmark className="h-4 w-4" />
+                        Unavailable
+                      </>
+                    ) : (
+                      <>
+                        <Bookmark className="h-4 w-4" />
+                        Reserve Book
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <Link to="/signin" state={{ from: `/books/${book.id}` }} className="btn-primary flex-1">
+                    <LogIn className="h-4 w-4" />
+                    Sign in to Reserve
+                  </Link>
+                )}
                 <button className="btn-secondary">
                   <Share2 className="h-4 w-4" />
                 </button>
               </div>
+
+              {/* Reservation feedback messages */}
+              {reservationSuccess && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg border border-success-200 bg-success-50 px-4 py-3 text-sm text-success-700 animate-fade-in">
+                  <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                  <span>Reservation placed! Due date is 14 days from today. An admin will review your request.</span>
+                </div>
+              )}
+              {reservationError && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700 animate-fade-in">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  <span>{reservationError}</span>
+                </div>
+              )}
+              {isAuthenticated && existingReservation && !reservationSuccess && !reservationError && checkedExisting && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-sm text-warning-700 animate-fade-in">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  <span>You already have an active reservation for this book.</span>
+                </div>
+              )}
 
               {book.status === 'available' && (
                 <p className="mt-3 text-center text-xs text-neutral-500">
