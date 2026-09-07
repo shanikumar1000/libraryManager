@@ -22,19 +22,16 @@ export async function createReservation(
   bookId: string,
   userId: string,
 ): Promise<void> {
-  const today = new Date();
-  const dueDate = new Date(today);
+  const now = new Date();
+  const dueDate = new Date(now);
   dueDate.setDate(dueDate.getDate() + 14);
-
-  const reservedDateStr = today.toISOString().slice(0, 10);
-  const dueDateStr = dueDate.toISOString().slice(0, 10);
 
   const { error } = await supabase.from('reservations').insert({
     book_id: bookId,
     user_id: userId,
-    reserved_date: reservedDateStr,
-    due_date: dueDateStr,
     status: 'pending',
+    reserved_at: now.toISOString(),
+    due_date: dueDate.toISOString().slice(0, 10),
   });
 
   if (error) throw error;
