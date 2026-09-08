@@ -1,14 +1,19 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Shield, BookOpen, Users, AlertCircle,
   CheckCircle2, Plus, ArrowRight,
   BookMarked, Activity, Search, SlidersHorizontal,
   Mail, Calendar, Clock, X, GraduationCap, BookText,
-  Check, XCircle, RotateCcw, Ban,
+  RotateCcw, Loader2, Check, XCircle,
 } from 'lucide-react';
-import { mockBooks, mockReservations } from '@/data/mockData';
-import type { ReservationStatus } from '@/types';
+import { fetchAllBooks } from '@/lib/booksService';
+import {
+  fetchAdminReservations,
+  updateReservationStatus,
+  type AdminReservation,
+} from '@/lib/adminReservationsService';
+import type { Book, ReservationStatus } from '@/types';
 import PageHeader from '@/components/PageHeader';
 import { useAuth } from '@/context/AuthContext';
 
@@ -29,6 +34,72 @@ export default function AdminDashboard() {
   const [selectedStatuses, setSelectedStatuses] = useState<ReservationStatus[]>([]);
   const [showFilters, setShowFilters] = useState(false);
 
+  const [reservations, setReservations] = useState<AdminReservation[]>([]);
+  const [books, setBooks] = useState<Book[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const [actionError, setActionError] = useState<Record<string, string>>({});
+
+  const loadReservations = () => {
+    fetchAdminReservations()
+      .then((data) => setReservations(data))
+      .catch((err) => setError(err.message ?? 'Failed to load reservations.'))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+
+    Promise.all([fetchAdminReservations(), fetchAllBooks()])
+      .then(([resData, bookData]) => {
+        if (!active) return;
+        setReservations(resData);
+        setBooks(bookData);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError(err.message ?? 'Failed to load reservations.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => { active = false; };
+  }, []);
+
+  const handleStatusUpdate = async (
+    reservationId: string,
+    currentStatus: ReservationStatus,
+    newStatus: 'approved' | 'rejected',
+    actionId: string,
+  ) => {
+    setActionLoading((prev) => ({ ...prev, [actionId]: true }));
+    setActionError((prev) => {
+      const next = { ...prev };
+      delete next[actionId];
+      return next;
+    });
+
+    try {
+      await updateReservationStatus(reservationId, currentStatus, newStatus);
+      loadReservations();
+    } catch (err) {
+      setActionError((prev) => ({
+        ...prev,
+        [actionId]: err instanceof Error ? err.message : 'Failed to update reservation.',
+      }));
+    } finally {
+      setActionLoading((prev) => {
+        const next = { ...prev };
+        delete next[actionId];
+        return next;
+      });
+    }
+  };
+
   const toggleStatus = (status: ReservationStatus) => {
     setSelectedStatuses((prev) =>
       prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
@@ -41,11 +112,11 @@ export default function AdminDashboard() {
   };
 
   const filteredReservations = useMemo(() => {
-    return mockReservations.filter((r) => {
+    return reservations.filter((r) => {
       const matchesSearch =
         !search ||
-        r.studentName.toLowerCase().includes(search.toLowerCase()) ||
-        r.studentEmail.toLowerCase().includes(search.toLowerCase()) ||
+        r.userName.toLowerCase().includes(search.toLowerCase()) ||
+        r.userEmail.toLowerCase().includes(search.toLowerCase()) ||
         r.bookTitle.toLowerCase().includes(search.toLowerCase()) ||
         r.id.toLowerCase().includes(search.toLowerCase());
 
@@ -54,12 +125,12 @@ export default function AdminDashboard() {
 
       return matchesSearch && matchesStatus;
     });
-  }, [search, selectedStatuses]);
+  }, [reservations, search, selectedStatuses]);
 
-  const totalBooks = mockBooks.length;
-  const availableBooks = mockBooks.filter((b) => b.status === 'available').length;
-  const issuedCount = mockReservations.filter((r) => r.status === 'issued').length;
-  const pendingCount = mockReservations.filter((r) => r.status === 'pending').length;
+  const totalBooks = books.length;
+  const availableBooks = books.filter((b) => b.status === 'available').length;
+  const issuedCount = reservations.filter((r) => r.status === 'issued').length;
+  const pendingCount = reservations.filter((r) => r.status === 'pending').length;
 
   const stats = [
     { icon: BookOpen, label: 'Total Titles', value: totalBooks, color: 'text-primary-600', bg: 'bg-primary-50' },
@@ -109,7 +180,9 @@ export default function AdminDashboard() {
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-neutral-900">Reservation Management</h2>
-              <span className="text-sm text-neutral-500">{filteredReservations.length} records</span>
+              <span className="text-sm text-neutral-500">
+                {loading ? 'Loading...' : `${filteredReservations.length} records`}
+              </span>
             </div>
 
             {/* Search & Filter Bar */}
@@ -174,7 +247,18 @@ export default function AdminDashboard() {
 
             {/* Reservation Cards */}
             <div className="mt-4 space-y-3">
-              {filteredReservations.length === 0 ? (
+              {loading ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-neutral-200 bg-white py-16 text-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+                  <p className="mt-3 text-sm text-neutral-500">Loading reservations...</p>
+                </div>
+              ) : error ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-error-200 bg-error-50 py-16 text-center">
+                  <AlertCircle className="h-10 w-10 text-error-300" />
+                  <p className="mt-3 text-sm font-medium text-error-700">Failed to load reservations</p>
+                  <p className="mt-1 text-xs text-error-600">{error}</p>
+                </div>
+              ) : filteredReservations.length === 0 ? (
                 <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-neutral-300 py-16 text-center">
                   <Search className="h-10 w-10 text-neutral-300" />
                   <p className="mt-3 text-sm font-medium text-neutral-700">No reservations found</p>
@@ -185,7 +269,19 @@ export default function AdminDashboard() {
                 </div>
               ) : (
                 filteredReservations.map((reservation, i) => (
-                  <ReservationCard key={reservation.id} reservation={reservation} index={i} />
+                  <ReservationCard
+                    key={reservation.id}
+                    reservation={reservation}
+                    index={i}
+                    actionLoading={actionLoading}
+                    actionError={actionError}
+                    onApprove={() =>
+                      handleStatusUpdate(reservation.id, reservation.status, 'approved', `${reservation.id}-approve`)
+                    }
+                    onReject={() =>
+                      handleStatusUpdate(reservation.id, reservation.status, 'rejected', `${reservation.id}-reject`)
+                    }
+                  />
                 ))
               )}
             </div>
@@ -231,7 +327,7 @@ export default function AdminDashboard() {
               <h3 className="font-semibold text-neutral-900">Reservations by Status</h3>
               <div className="mt-4 space-y-3">
                 {allStatuses.map((status) => {
-                  const count = mockReservations.filter((r) => r.status === status).length;
+                  const count = reservations.filter((r) => r.status === status).length;
                   const config = statusConfig[status];
                   return (
                     <div key={status} className="flex items-center justify-between">
@@ -264,10 +360,33 @@ export default function AdminDashboard() {
   );
 }
 
-function ReservationCard({ reservation, index }: { reservation: typeof mockReservations[0]; index: number }) {
-  const book = mockBooks.find((b) => b.id === reservation.bookId);
+interface ReservationCardProps {
+  reservation: AdminReservation;
+  index: number;
+  actionLoading: Record<string, boolean>;
+  actionError: Record<string, string>;
+  onApprove: () => void;
+  onReject: () => void;
+}
+
+function ReservationCard({
+  reservation,
+  index,
+  actionLoading,
+  actionError,
+  onApprove,
+  onReject,
+}: ReservationCardProps) {
   const config = statusConfig[reservation.status];
   const isIssued = reservation.status === 'issued';
+  const isPending = reservation.status === 'pending';
+  const approveId = `${reservation.id}-approve`;
+  const rejectId = `${reservation.id}-reject`;
+  const approveLoading = actionLoading[approveId] ?? false;
+  const rejectLoading = actionLoading[rejectId] ?? false;
+  const approveError = actionError[approveId];
+  const rejectError = actionError[rejectId];
+  const anyActionLoading = approveLoading || rejectLoading;
 
   return (
     <div
@@ -276,7 +395,7 @@ function ReservationCard({ reservation, index }: { reservation: typeof mockReser
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
         {/* Book cover thumbnail */}
-        <div className={`h-20 w-16 flex-shrink-0 rounded-lg bg-gradient-to-br ${book?.coverColor ?? 'from-neutral-700 to-neutral-500'} flex items-center justify-center p-2`}>
+        <div className={`h-20 w-16 flex-shrink-0 rounded-lg bg-gradient-to-br ${reservation.bookCoverColor ?? 'from-neutral-700 to-neutral-500'} flex items-center justify-center p-2`}>
           <span className="font-serif text-[10px] leading-tight text-white/95 text-center line-clamp-3">
             {reservation.bookTitle}
           </span>
@@ -289,13 +408,13 @@ function ReservationCard({ reservation, index }: { reservation: typeof mockReser
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-50 text-primary-600 flex-shrink-0">
               <GraduationCap className="h-3.5 w-3.5" />
             </div>
-            <span className="font-medium text-neutral-900 truncate">{reservation.studentName}</span>
+            <span className="font-medium text-neutral-900 truncate">{reservation.userName}</span>
             <span className={`badge ${config.badge} flex-shrink-0`}>{config.label}</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-neutral-500 pl-9">
             <span className="flex items-center gap-1">
               <Mail className="h-3 w-3" />
-              {reservation.studentEmail}
+              {reservation.userEmail}
             </span>
           </div>
 
@@ -307,7 +426,7 @@ function ReservationCard({ reservation, index }: { reservation: typeof mockReser
             <Link to={`/books/${reservation.bookId}`} className="font-medium text-neutral-700 hover:text-primary-700 transition-colors truncate">
               {reservation.bookTitle}
             </Link>
-            {book && <span className="text-xs text-neutral-400 truncate hidden sm:inline">by {book.author}</span>}
+            <span className="text-xs text-neutral-400 truncate hidden sm:inline">by {reservation.bookAuthor}</span>
           </div>
 
           {/* Dates */}
@@ -327,46 +446,50 @@ function ReservationCard({ reservation, index }: { reservation: typeof mockReser
             <div className="mt-2 pl-9">
               <span className="inline-flex items-center gap-1.5 rounded-md bg-success-50 px-2.5 py-1 text-xs font-medium text-success-700">
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                Currently held by {reservation.studentName}
+                Currently held by {reservation.userName}
               </span>
             </div>
           )}
         </div>
 
         {/* Actions */}
-        <div className="flex flex-row flex-wrap gap-1.5 sm:flex-col sm:items-end">
-          {reservation.status === 'pending' && (
-            <>
-              <button className="flex items-center gap-1.5 rounded-lg bg-success-50 px-3 py-1.5 text-xs font-medium text-success-700 transition-colors hover:bg-success-100">
+        {isPending && (
+          <div className="flex flex-row flex-wrap gap-1.5 sm:flex-col sm:items-end">
+            <button
+              onClick={onApprove}
+              disabled={anyActionLoading}
+              className="flex items-center gap-1.5 rounded-lg bg-success-50 px-3 py-1.5 text-xs font-medium text-success-700 transition-colors hover:bg-success-100 disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {approveLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
                 <Check className="h-3.5 w-3.5" />
-                Approve
-              </button>
-              <button className="flex items-center gap-1.5 rounded-lg bg-error-50 px-3 py-1.5 text-xs font-medium text-error-600 transition-colors hover:bg-error-100">
+              )}
+              Approve
+            </button>
+            <button
+              onClick={onReject}
+              disabled={anyActionLoading}
+              className="flex items-center gap-1.5 rounded-lg bg-error-50 px-3 py-1.5 text-xs font-medium text-error-600 transition-colors hover:bg-error-100 disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {rejectLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
                 <XCircle className="h-3.5 w-3.5" />
-                Reject
-              </button>
-            </>
-          )}
-          {reservation.status === 'approved' && (
-            <button className="flex items-center gap-1.5 rounded-lg bg-primary-50 px-3 py-1.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100">
-              <BookMarked className="h-3.5 w-3.5" />
-              Issue Book
+              )}
+              Reject
             </button>
-          )}
-          {reservation.status === 'issued' && (
-            <button className="flex items-center gap-1.5 rounded-lg bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-200">
-              <RotateCcw className="h-3.5 w-3.5" />
-              Mark Returned
-            </button>
-          )}
-          {(reservation.status === 'pending' || reservation.status === 'approved') && (
-            <button className="flex items-center gap-1.5 rounded-lg bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-500 transition-colors hover:bg-neutral-200">
-              <Ban className="h-3.5 w-3.5" />
-              Cancel
-            </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
+
+      {/* Action error feedback */}
+      {(approveError || rejectError) && (
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-error-200 bg-error-50 px-4 py-2.5 text-xs text-error-700 animate-fade-in">
+          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+          <span>{approveError || rejectError}</span>
+        </div>
+      )}
     </div>
   );
 }
