@@ -88,3 +88,25 @@ export async function updateReservationStatus(
     throw new Error('This reservation is no longer pending and could not be updated. It may have been modified by another admin.');
   }
 }
+
+export async function issueReservation(
+  reservationId: string,
+  currentStatus: ReservationStatus,
+): Promise<void> {
+  if (currentStatus !== 'approved') {
+    throw new Error(
+      `Cannot issue a reservation that is "${currentStatus}". Only approved reservations can be issued.`,
+    );
+  }
+
+  const { data, error } = await supabase.rpc('issue_reservation', {
+    reservation_uuid: reservationId,
+  });
+
+  if (error) throw error;
+
+  const result = data as { success?: boolean; error?: string } | null;
+  if (!result || !result.success) {
+    throw new Error(result?.error ?? 'Failed to issue reservation.');
+  }
+}

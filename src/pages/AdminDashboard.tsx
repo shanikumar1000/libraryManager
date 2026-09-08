@@ -11,6 +11,7 @@ import { fetchAllBooks } from '@/lib/booksService';
 import {
   fetchAdminReservations,
   updateReservationStatus,
+  issueReservation,
   type AdminReservation,
 } from '@/lib/adminReservationsService';
 import type { Book, ReservationStatus } from '@/types';
@@ -90,6 +91,35 @@ export default function AdminDashboard() {
       setActionError((prev) => ({
         ...prev,
         [actionId]: err instanceof Error ? err.message : 'Failed to update reservation.',
+      }));
+    } finally {
+      setActionLoading((prev) => {
+        const next = { ...prev };
+        delete next[actionId];
+        return next;
+      });
+    }
+  };
+
+  const handleIssue = async (
+    reservationId: string,
+    currentStatus: ReservationStatus,
+    actionId: string,
+  ) => {
+    setActionLoading((prev) => ({ ...prev, [actionId]: true }));
+    setActionError((prev) => {
+      const next = { ...prev };
+      delete next[actionId];
+      return next;
+    });
+
+    try {
+      await issueReservation(reservationId, currentStatus);
+      loadReservations();
+    } catch (err) {
+      setActionError((prev) => ({
+        ...prev,
+        [actionId]: err instanceof Error ? err.message : 'Failed to issue reservation.',
       }));
     } finally {
       setActionLoading((prev) => {
@@ -281,6 +311,9 @@ export default function AdminDashboard() {
                     onReject={() =>
                       handleStatusUpdate(reservation.id, reservation.status, 'rejected', `${reservation.id}-reject`)
                     }
+                    onIssue={() =>
+                      handleIssue(reservation.id, reservation.status, `${reservation.id}-issue`)
+                    }
                   />
                 ))
               )}
@@ -367,6 +400,7 @@ interface ReservationCardProps {
   actionError: Record<string, string>;
   onApprove: () => void;
   onReject: () => void;
+  onIssue: () => void;
 }
 
 function ReservationCard({
@@ -376,17 +410,22 @@ function ReservationCard({
   actionError,
   onApprove,
   onReject,
+  onIssue,
 }: ReservationCardProps) {
   const config = statusConfig[reservation.status];
   const isIssued = reservation.status === 'issued';
   const isPending = reservation.status === 'pending';
+  const isApproved = reservation.status === 'approved';
   const approveId = `${reservation.id}-approve`;
   const rejectId = `${reservation.id}-reject`;
+  const issueId = `${reservation.id}-issue`;
   const approveLoading = actionLoading[approveId] ?? false;
   const rejectLoading = actionLoading[rejectId] ?? false;
+  const issueLoading = actionLoading[issueId] ?? false;
   const approveError = actionError[approveId];
   const rejectError = actionError[rejectId];
-  const anyActionLoading = approveLoading || rejectLoading;
+  const issueError = actionError[issueId];
+  const anyActionLoading = approveLoading || rejectLoading || issueLoading;
 
   return (
     <div
@@ -481,13 +520,29 @@ function ReservationCard({
             </button>
           </div>
         )}
+        {isApproved && (
+          <div className="flex flex-row flex-wrap gap-1.5 sm:flex-col sm:items-end">
+            <button
+              onClick={onIssue}
+              disabled={anyActionLoading}
+              className="flex items-center gap-1.5 rounded-lg bg-primary-50 px-3 py-1.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100 disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {issueLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <BookMarked className="h-3.5 w-3.5" />
+              )}
+              Issue Book
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Action error feedback */}
-      {(approveError || rejectError) && (
+      {(approveError || rejectError || issueError) && (
         <div className="mt-3 flex items-center gap-2 rounded-lg border border-error-200 bg-error-50 px-4 py-2.5 text-xs text-error-700 animate-fade-in">
           <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
-          <span>{approveError || rejectError}</span>
+          <span>{approveError || rejectError || issueError}</span>
         </div>
       )}
     </div>
